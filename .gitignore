@@ -1,0 +1,10 @@
+DriftingGratings/Out
+DriftingGratings/Error
+DriftingGratings/LGN_firing_rates
+DriftingGratings/Video
+FullFieldFlash/Error
+FullFieldFlash/LGN_firing_rates
+FullFieldFlash/Video
+DriftingGratings/Drifting gratings.ipynb
+DriftingGratings/.ipynb_checkpoints
+__pycache__
