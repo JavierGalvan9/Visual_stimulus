@@ -1,11 +1,13 @@
 import os
-import tqdm
+# import tqdm
 import socket
 import pickle as pkl
 import numpy as np
 import pandas as pd
 import tensorflow as tf
 import matplotlib.pyplot as plt
+
+# import pdb
 
 from bmtk.simulator.filternet.lgnmodel.fitfuns import makeBasis_StimKernel
 from bmtk.simulator.filternet.lgnmodel.spatialfilter import GaussianSpatialFilter
@@ -25,7 +27,8 @@ def create_temporal_filter(inp_dict):
 
 def create_one_unit_of_two_subunit_filter(prs, ttp_exp):
     filt = create_temporal_filter(prs)
-    tcross_ind = get_tcross_from_temporal_kernel(filt.get_kernel(threshold=-1.0).kernel)
+    tcross_ind = get_tcross_from_temporal_kernel(
+        filt.get_kernel(threshold=-1.0).kernel)
     filt_sum = filt.get_kernel(threshold=-1.0).kernel[:tcross_ind].sum()
 
     # Calculate delay offset needed to match response latency with data and rebuild temporal filter
@@ -84,9 +87,27 @@ def select_spatial(x, y, convolved_movie):
 
 
 class LGN(object):
-    def __init__(self):
-        root_path = os.path.split(__file__)[0]
-        path = os.path.join(root_path, 'data/lgn_full_col_cells_3.csv')
+    def __init__(self, row_size=80, col_size=120, lgn_data_path=None):
+        if lgn_data_path is None:
+            lgn_data_path_name = f'lgn_full_col_cells_{col_size}x{row_size}.csv'
+            hostname = socket.gethostname()
+            # print current path
+            print(os.getcwd())
+            if hostname.count('nvcluster') > 0:
+                path = f'/home/ifgovh/tf_billeh_column/{lgn_data_path_name}'
+            elif hostname.count('juwels') > 0:
+                path = f'/p/project/structuretofunction/guozhang/glif_criticality/GLIF_network/{lgn_data_path_name}'
+            elif hostname.count('pCluster') > 0:
+                path = f'/home/guozhang/allen/LGN/LGN/{lgn_data_path_name}'
+            elif hostname.count('nid') > 0:
+                path = f'/users/bp000436/glif_criticality/GLIF_network/{lgn_data_path_name}'
+            elif hostname.count('shinya') > 0:
+                path = f'/allen/programs/mindscope/workgroups/realistic-model/shinya.ito/tensorflow/{lgn_data_path_name}'
+            else:
+                path = f'/home/jgalvan/Desktop/Neurocoding/Visual_stimulus/Utils/data/{lgn_data_path_name}'
+
+        else:
+            path = lgn_data_path
 
         d = pd.read_csv(path, delimiter=' ')
         # print(d['spatial_size'])
@@ -94,28 +115,33 @@ class LGN(object):
         self.spatial_sizes = spatial_sizes
         model_id = d['model_id'].to_numpy()
         self.model_id = model_id
-        amplitude = np.array([1. if a.count('ON') > 0 else -1. for a in model_id])
+        amplitude = np.array(
+            [1. if a.count('ON') > 0 else -1. for a in model_id])
         non_dom_amplitude = np.zeros_like(amplitude)
-        is_composite = np.array([a.count('ON') > 0 and a.count('OFF') > 0 for a in model_id]).astype(np.float)
+        is_composite = np.array([a.count('ON') > 0 and a.count(
+            'OFF') > 0 for a in model_id]).astype(np.float32)
         self.is_composite = is_composite
         x = d['x'].to_numpy()
         y = d['y'].to_numpy()
         non_dominant_x = np.zeros_like(x)
         non_dominant_y = np.zeros_like(y)
         tuning_angle = d['tuning_angle'].to_numpy()
-        subfield_separation = d['sf_sep'].to_numpy()
+        subfield_separation = d['sf_sep'].to_numpy()  # for composite cells
 
+        root_path = os.path.split(__file__)[0]
         s_path = os.path.join(root_path, 'spontaneous_firing_rates.pkl')
         if not os.path.exists(s_path):
             cell_type = [a[:a.find('_')] for a in model_id]
             tf_str = [a[a.find('_') + 1:] for a in model_id]
             spontaneous_firing_rates = []
             print('Computing spontaneous firing rates')
-            for a, b in tqdm.tqdm(zip(cell_type, tf_str), total=len(model_id)):
+            # for a, b in tqdm.tqdm(zip(cell_type, tf_str), total=len(model_id)):
+            for a, b in zip(cell_type, tf_str):
                 if a.count('ON') > 0 and a.count('OFF') > 0:
                     spontaneous_firing_rates.append(-1)
                 else:
-                    spontaneous_firing_rate = get_data_metrics_for_each_subclass(a)[b]['spont_exp']
+                    spontaneous_firing_rate = get_data_metrics_for_each_subclass(a)[
+                        b]['spont_exp']
                     spontaneous_firing_rates.append(spontaneous_firing_rate[0])
             spontaneous_firing_rates = np.array(spontaneous_firing_rates)
             with open(s_path, 'wb') as f:
@@ -125,13 +151,19 @@ class LGN(object):
             with open(s_path, 'rb') as f:
                 spontaneous_firing_rates = pkl.load(f)
 
-        temporal_peaks_dom = np.stack((d['kpeaks_dom_0'].to_numpy(), d['kpeaks_dom_1'].to_numpy()), -1)
-        temporal_weights = np.stack((d['weight_dom_0'].to_numpy(), d['weight_dom_1'].to_numpy()), -1)
-        temporal_delays = np.stack((d['delay_dom_0'].to_numpy(), d['delay_dom_1'].to_numpy()), -1)
+        temporal_peaks_dom = np.stack(
+            (d['kpeaks_dom_0'].to_numpy(), d['kpeaks_dom_1'].to_numpy()), -1)
+        temporal_weights = np.stack(
+            (d['weight_dom_0'].to_numpy(), d['weight_dom_1'].to_numpy()), -1)
+        temporal_delays = np.stack(
+            (d['delay_dom_0'].to_numpy(), d['delay_dom_1'].to_numpy()), -1)
 
-        temporal_peaks_non_dom = np.stack((d['kpeaks_non_dom_0'].to_numpy(), d['kpeaks_non_dom_1'].to_numpy()), -1)
-        temporal_weights_non_dom = np.stack((d['weight_non_dom_0'].to_numpy(), d['weight_non_dom_1'].to_numpy()), -1)
-        temporal_delays_non_dom = np.stack((d['delay_non_dom_0'].to_numpy(), d['delay_non_dom_1'].to_numpy()), -1)
+        temporal_peaks_non_dom = np.stack(
+            (d['kpeaks_non_dom_0'].to_numpy(), d['kpeaks_non_dom_1'].to_numpy()), -1)
+        temporal_weights_non_dom = np.stack(
+            (d['weight_non_dom_0'].to_numpy(), d['weight_non_dom_1'].to_numpy()), -1)
+        temporal_delays_non_dom = np.stack(
+            (d['delay_non_dom_0'].to_numpy(), d['delay_non_dom_1'].to_numpy()), -1)
 
         # values from bmtk
         t_path = os.path.join(root_path, 'temporal_kernels.pkl')
@@ -141,9 +173,11 @@ class LGN(object):
             dom_temporal_kernels = []
             non_dom_temporal_kernels = []
             print('Computing temporal kernels')
-            for i in tqdm.tqdm(range(x.shape[0])):
+            # for i in tqdm.tqdm(range(x.shape[0])):
+            for i in range(x.shape[0]):
                 dom_temporal_kernel = np.zeros((kernel_length,), np.float32)
-                non_dom_temporal_kernel = np.zeros((kernel_length,), np.float32)
+                non_dom_temporal_kernel = np.zeros(
+                    (kernel_length,), np.float32)
                 if model_id[i].count('ON') > 0 and model_id[i].count('OFF') > 0:
                     non_dom_params = dict(
                         opt_wts=temporal_weights_non_dom[i],
@@ -158,45 +192,54 @@ class LGN(object):
                     amp_on = 1.0  # set the non-dominant subunit amplitude to unity
 
                     if model_id[i].count('sONsOFF_001') > 0:
-                        non_dom_filter, non_dom_sum = create_one_unit_of_two_subunit_filter(non_dom_params, 121.)
-                        dom_filter, dom_sum = create_one_unit_of_two_subunit_filter(dom_params, 115.)
+                        non_dom_filter, non_dom_sum = create_one_unit_of_two_subunit_filter(
+                            non_dom_params, 121.)
+                        dom_filter, dom_sum = create_one_unit_of_two_subunit_filter(
+                            dom_params, 115.)
 
                         spont = 4.0
                         max_roff = 35.0
                         max_ron = 21.0
                         amp_off = -(max_roff / max_ron) * (non_dom_sum / dom_sum) * amp_on - (
-                                spont * (max_roff - max_ron)) / (max_ron * dom_sum)
+                            spont * (max_roff - max_ron)) / (max_ron * dom_sum)
                     elif model_id[i].count('sONtOFF_001') > 0:
-                        non_dom_filter, non_dom_sum = create_one_unit_of_two_subunit_filter(non_dom_params, 93.5)
-                        dom_filter, dom_sum = create_one_unit_of_two_subunit_filter(dom_params, 64.8)
+                        non_dom_filter, non_dom_sum = create_one_unit_of_two_subunit_filter(
+                            non_dom_params, 93.5)
+                        dom_filter, dom_sum = create_one_unit_of_two_subunit_filter(
+                            dom_params, 64.8)
 
                         spont = 5.5
                         max_roff = 46.0
                         max_ron = 31.0
                         amp_off = -0.7 * (max_roff / max_ron) * (non_dom_sum / dom_sum) * amp_on - (
-                                spont * (max_roff - max_ron)) / (max_ron * dom_sum)
+                            spont * (max_roff - max_ron)) / (max_ron * dom_sum)
                     else:
                         raise ValueError('Unknown cell type')
                     non_dom_amplitude[i] = amp_on
                     amplitude[i] = amp_off
                     spontaneous_firing_rates[i] = spont / 2
 
-                    hor_offset = np.cos(tuning_angle[i] * np.pi / 180.) * subfield_separation[i] + x[i]
-                    vert_offset = np.sin(tuning_angle[i] * np.pi / 180.) * subfield_separation[i] + y[i]
+                    hor_offset = np.cos(
+                        tuning_angle[i] * np.pi / 180.) * subfield_separation[i] + x[i]
+                    vert_offset = np.sin(
+                        tuning_angle[i] * np.pi / 180.) * subfield_separation[i] + y[i]
                     non_dominant_x[i] = hor_offset
                     non_dominant_y[i] = vert_offset
                     dom_temporal_kernel[-len(dom_filter.kernel_data):] = dom_filter.kernel_data[::-1]
                     non_dom_temporal_kernel[-len(non_dom_filter.kernel_data):] = non_dom_filter.kernel_data[::-1]
                 else:
                     dd = dict(neye=0, ncos=2, kpeaks=temporal_peaks_dom[i], b=.3,
-                              delays=[temporal_delays[i].astype(np.int)])
-                    kernel_data = np.dot(makeBasis_StimKernel(dd, nkt), temporal_weights[i])
+                              delays=[temporal_delays[i].astype(int)])
+                    kernel_data = np.dot(makeBasis_StimKernel(
+                        dd, nkt), temporal_weights[i])
                     dom_temporal_kernel[-len(kernel_data):] = kernel_data
 
                 dom_temporal_kernels.append(dom_temporal_kernel)
                 non_dom_temporal_kernels.append(non_dom_temporal_kernel)
-            dom_temporal_kernels = np.array(dom_temporal_kernels).astype(np.float32)
-            non_dom_temporal_kernels = np.array(non_dom_temporal_kernels).astype(np.float32)
+            dom_temporal_kernels = np.array(
+                dom_temporal_kernels).astype(np.float32)
+            non_dom_temporal_kernels = np.array(
+                non_dom_temporal_kernels).astype(np.float32)
             to_save = dict(
                 dom_temporal_kernels=dom_temporal_kernels,
                 non_dom_temporal_kernels=non_dom_temporal_kernels,
@@ -219,22 +262,50 @@ class LGN(object):
             amplitude = loaded['amplitude']
             non_dom_amplitude = loaded['non_dom_amplitude']
             spontaneous_firing_rates = loaded['spontaneous_firing_rates']
-        truncation = np.min(np.sum(np.cumsum(np.abs(dom_temporal_kernels), axis=1) <= 1e-6, 1))
-        non_dom_truncation = np.min(np.sum(np.cumsum(np.abs(non_dom_temporal_kernels), axis=1) <= 1e-6, 1))
+        truncation = np.min(
+            np.sum(np.cumsum(np.abs(dom_temporal_kernels), axis=1) <= 1e-6, 1))
+        non_dom_truncation = np.min(
+            np.sum(np.cumsum(np.abs(non_dom_temporal_kernels), axis=1) <= 1e-6, 1))
         truncation = np.min([truncation, non_dom_truncation])
         print(f'Could truncate {truncation} steps from filter')
 
-        x = x * 239 / 240
-        y = y * 119 / 120
+        x = x * (col_size-1) / col_size  # 239 / 240
+        y = y * (row_size-1) / row_size  # 119 / 120
         x[np.floor(x) < 0] = 0.
         y[np.floor(y) < 0] = 0.
+        x[np.ceil(x) >= float(col_size-1)] = float(col_size-1)
+        y[np.ceil(y) >= float(row_size-1)] = float(row_size-1)
 
-        non_dominant_x = non_dominant_x * 239 / 240
-        non_dominant_y = non_dominant_y * 119 / 120
+        non_dominant_x = non_dominant_x * (col_size-1) / col_size  # 239 / 240
+        non_dominant_y = non_dominant_y * (row_size-1) / row_size
         non_dominant_x[np.floor(non_dominant_x) < 0] = 0.
         non_dominant_y[np.floor(non_dominant_y) < 0] = 0.
-        non_dominant_x[np.ceil(non_dominant_x) >= 239.] = 239.
-        non_dominant_y[np.ceil(non_dominant_y) >= 119.] = 119.
+        non_dominant_x[np.ceil(non_dominant_x) >= float(col_size-1)] = float(col_size-1)
+        non_dominant_y[np.ceil(non_dominant_y) >= float(row_size-1)] = float(row_size-1)
+
+        # prepare the spatial kernels in advance and store in TF format
+        d_spatial = 1.
+        spatial_range = np.arange(0, 15, d_spatial)
+        x_range = np.arange(-50, 51)  # define the spatial kernel max size
+        y_range = np.arange(-50, 51)
+
+        # kernels = []
+        gaussian_filters = []
+        for i in range(len(spatial_range) - 1):
+            sigma = np.round(np.mean(spatial_range[i:i+2])) / 3
+            original_filter = GaussianSpatialFilter(translate=(
+                0., 0.), sigma=(sigma, sigma), origin=(0., 0.))
+            kernel = original_filter.get_kernel(
+                x_range, y_range, amplitude=1.).full()
+            # kernels.append(kernel)
+            nonzero_inds = np.where(np.abs(kernel) > 1e-9)
+            rm, rM = nonzero_inds[0].min(), nonzero_inds[0].max()
+            cm, cM = nonzero_inds[1].min(), nonzero_inds[1].max()
+            kernel = kernel[rm:rM + 1, cm:cM + 1]
+            gaussian_filter = kernel[..., None, None]
+            gaussian_filter = tf.convert_to_tensor(
+                gaussian_filter, dtype=tf.float32)
+            gaussian_filters.append(gaussian_filter)
 
         self.x = x
         self.y = y
@@ -245,6 +316,8 @@ class LGN(object):
         self.spontaneous_firing_rates = spontaneous_firing_rates
         self.dom_temporal_kernels = dom_temporal_kernels
         self.non_dom_temporal_kernels = non_dom_temporal_kernels
+        # self.kernels = kernels
+        self.gaussian_filters = gaussian_filters
 
     def spatial_response(self, movie):
         d_spatial = 1.
@@ -255,8 +328,8 @@ class LGN(object):
         non_dominant_x = self.non_dominant_x
         non_dominant_y = self.non_dominant_y
         spatial_sizes = self.spatial_sizes
-        x_range = np.arange(-50, 51)
-        y_range = np.arange(-50, 51)
+        # x_range = np.arange(-50, 51)
+        # y_range = np.arange(-50, 51)
 
         all_spatial_responses = []
         neuron_ids = []
@@ -264,51 +337,99 @@ class LGN(object):
         all_non_dom_spatial_responses = []
 
         for i in range(len(spatial_range) - 1):
-            sel = np.logical_and(spatial_sizes < spatial_range[i + 1], spatial_sizes >= spatial_range[i])
+            sel = np.logical_and(
+                spatial_sizes < spatial_range[i + 1], spatial_sizes >= spatial_range[i])
             if np.sum(sel) <= 0:
                 continue
             neuron_ids.extend(np.where(sel)[0])
 
             # construct spatial filter
             sigma = np.round(np.mean(spatial_range[i:i+2])) / 3.
-            original_filter = GaussianSpatialFilter(translate=(0., 0.), sigma=(sigma, sigma), origin=(0., 0.))
-            kernel = original_filter.get_kernel(x_range, y_range, amplitude=1.).full()
-            nonzero_inds = np.where(np.abs(kernel) > 1e-9)
-            rm, rM = nonzero_inds[0].min(), nonzero_inds[0].max()
-            cm, cM = nonzero_inds[1].min(), nonzero_inds[1].max()
-            kernel = kernel[rm:rM + 1, cm:cM + 1]
-            gaussian_filter = kernel[..., None, None]
+            # original_filter = GaussianSpatialFilter(translate=(0., 0.), sigma=(sigma, sigma), origin=(0., 0.))
+            # kernel = original_filter.get_kernel(x_range, y_range, amplitude=1.).full()
+            # kernel = self.kernels[i]
+            # nonzero_inds = np.where(np.abs(kernel) > 1e-9)
+            # rm, rM = nonzero_inds[0].min(), nonzero_inds[0].max()
+            # cm, cM = nonzero_inds[1].min(), nonzero_inds[1].max()
+            # kernel = kernel[rm:rM + 1, cm:cM + 1]
+            # gaussian_filter = kernel[..., None, None]
+            gaussian_filter = self.gaussian_filters[i]
 
             # gaussian_filter = create_gaussian_filter(np.round(np.mean(spatial_range[i:i+2])))
             # apply it
-            convolved_movie = tf.nn.conv2d(movie, gaussian_filter, strides=[1, 1], padding='SAME')[..., 0]
-
+            # convolved_movie = tf.nn.conv2d(movie, gaussian_filter, strides=[1, 1], padding='SAME')[..., 0]
+            convolved_movie = self.do_conv(movie, gaussian_filter)
             # select items
             spatial_responses = select_spatial(x[sel], y[sel], convolved_movie)
-            non_dom_spatial_responses = select_spatial(non_dominant_x[sel], non_dominant_y[sel], convolved_movie)
+            non_dom_spatial_responses = select_spatial(
+                non_dominant_x[sel], non_dominant_y[sel], convolved_movie)
             all_spatial_responses.append(spatial_responses)
             all_non_dom_spatial_responses.append(non_dom_spatial_responses)
         neuron_ids = np.array(neuron_ids)
         all_spatial_responses = tf.concat(all_spatial_responses, 1)
-        all_non_dom_spatial_responses = tf.concat(all_non_dom_spatial_responses, 1)
+        all_non_dom_spatial_responses = tf.concat(
+            all_non_dom_spatial_responses, 1)
 
         sorted_neuron_ids_indices = np.argsort(neuron_ids)
-        all_spatial_responses = tf.gather(all_spatial_responses, sorted_neuron_ids_indices, axis=1)
-        all_non_dom_spatial_responses = tf.gather(all_non_dom_spatial_responses, sorted_neuron_ids_indices, axis=1)
+        all_spatial_responses = tf.gather(
+            all_spatial_responses, sorted_neuron_ids_indices, axis=1)
+        all_non_dom_spatial_responses = tf.gather(
+            all_non_dom_spatial_responses, sorted_neuron_ids_indices, axis=1)
 
-        print(f'Dominant spatial reponses computed: {all_spatial_responses.shape}')
-        print(f'Non dominant spatial reponses computed: {all_non_dom_spatial_responses.shape}')
+        # print(f'Dominant spatial reponses computed: {all_spatial_responses.shape}')
+        # print(f'Non dominant spatial reponses computed: {all_non_dom_spatial_responses.shape}')
 
         return all_spatial_responses, all_non_dom_spatial_responses
+    # @tf.function(jit_compile=True)
 
+    def do_conv(self, movie, gaussian_filter):
+        return tf.nn.conv2d(movie, gaussian_filter, strides=[1, 1], padding='SAME')[..., 0]
+
+    # @tf.function(jit_compile=True) # This works for TF 2.7.0 an onwards
     def firing_rates_from_spatial(self, all_spatial_responses, all_non_dom_spatial_responses):
-        dom_filtered_output = temporal_filter(all_spatial_responses, self.dom_temporal_kernels)
-        non_dom_filtered_output = temporal_filter(all_non_dom_spatial_responses, self.non_dom_temporal_kernels)
-
+        dom_filtered_output = temporal_filter(
+            all_spatial_responses, self.dom_temporal_kernels)
+        non_dom_filtered_output = temporal_filter(
+            all_non_dom_spatial_responses, self.non_dom_temporal_kernels)
         # combined_filtered_output = dom_filtered_output * amplitude + non_dom_filtered_output * non_dom_amplitude
-        firing_rates = transfer_function(dom_filtered_output * self.amplitude + self.spontaneous_firing_rates)
+        firing_rates = transfer_function(
+            dom_filtered_output * self.amplitude + self.spontaneous_firing_rates)
         multi_firing_rates = firing_rates + transfer_function(
             non_dom_filtered_output * self.non_dom_amplitude + self.spontaneous_firing_rates)
-        firing_rates = firing_rates * (1 - self.is_composite) + multi_firing_rates * self.is_composite
+        firing_rates = firing_rates * \
+            (1 - self.is_composite) + multi_firing_rates * self.is_composite
         return firing_rates
 
+
+def main():
+    from check_filter import load_example_movie
+    movie = load_example_movie(duration=2000, onset=1000, offset=1100)
+
+    lgn = LGN()
+    spatial = lgn.spatial_response(movie)
+    firing_rates = lgn.firing_rates_from_spatial(*spatial)
+
+    # fig, ax = plt.subplots(figsize=(12, 12))
+    fig = plt.figure(figsize=(12, 12))
+    gs = fig.add_gridspec(5, 1)
+    ax = fig.add_subplot(gs[:4])
+    if False:
+        import h5py
+        f = h5py.File(
+            '/data/allen/v1_model/go_nogo_image_outputs/stim_0.h5_f_tot.h5', mode='r')
+        d = np.array(f['firing_rates_Hz'])
+        data = firing_rates[:, :4000].numpy().T - d[:4000]
+        abs_max = np.abs(data).max()
+        p = ax.pcolormesh(data, cmap='seismic', vmin=-abs_max, vmax=abs_max)
+    else:
+        data = firing_rates.numpy().T
+        p = ax.pcolormesh(data, cmap='cividis')
+    plt.colorbar(p, ax=ax)
+    ax = fig.add_subplot(gs[4])
+    ax.plot(data.mean(0))
+    fig.savefig('temp.png', dpi=300)
+    plt.show()
+
+
+if __name__ == '__main__':
+    main()

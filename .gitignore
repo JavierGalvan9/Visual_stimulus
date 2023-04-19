@@ -1,10 +1,22 @@
 DriftingGratings/Out
 DriftingGratings/Error
 DriftingGratings/LGN_firing_rates
+DriftingGratings/240X120_LGN_firing_rates
 DriftingGratings/Video
-FullFieldFlash/Error
-FullFieldFlash/LGN_firing_rates
-FullFieldFlash/Video
 DriftingGratings/Drifting gratings.ipynb
 DriftingGratings/.ipynb_checkpoints
+DriftingGratings/movie.mp4
+FullFieldFlash/Error
+FullFieldFlash/Out
+FullFieldFlash/LGN_firing_rates
+FullFieldFlash/Video
+FullFieldFlash/Old
+
 __pycache__
+*/__pycache__*
+.vscode
+
+Utils/old_lgn.py
+Utils/spontaneous_firing_rates.pkl
+Utils/temporal_kernels.pkl
+Utils/pruebas.py

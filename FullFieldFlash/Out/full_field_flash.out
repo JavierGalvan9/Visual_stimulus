@@ -1,6 +1,6 @@
 Could truncate 126 steps from filter
-Dominant spatial reponses computed: (2500, 17400)
-Non dominant spatial reponses computed: (2500, 17400)
-(2500, 17400)
-Computed LGN response to visual stimuli in 1067.70 seconds
-Converted stimulus (2500, 120, 240, 1) (video) to LGN firing rates (2500, 17400)
+Dominant spatial reponses computed: (3000, 17400)
+Non dominant spatial reponses computed: (3000, 17400)
+(3000, 17400)
+Computed LGN response to visual stimuli in 1292.66 seconds
+Converted stimulus (3000, 120, 240, 1) (video) to LGN firing rates (3000, 17400)
