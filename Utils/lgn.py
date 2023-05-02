@@ -4,6 +4,7 @@ import socket
 import pickle as pkl
 import numpy as np
 import pandas as pd
+import h5py
 import tensorflow as tf
 import matplotlib.pyplot as plt
 
@@ -85,6 +86,31 @@ def select_spatial(x, y, convolved_movie):
     spatial_responses = tf.transpose(spatial_responses)
     return spatial_responses
 
+def create_lgn_units_info(csv_path='data/lgn_node_types.csv', h5_path='data/lgn_nodes.h5', filename='lgn_full_col_cells.csv'):
+    filename = os.path.join('data', filename)
+    # Load both the h5 file and the csv file
+    csv_file = pd.read_csv(csv_path, sep=' ')
+    features = ['id', 'model_id', 'x', 'y', 'ei', 'location', 'spatial_size', 'kpeaks_dom_0', 'kpeaks_dom_1', 'weight_dom_0', 'weight_dom_1', 'delay_dom_0', 'delay_dom_1', 'kpeaks_non_dom_0', 'kpeaks_non_dom_1', 'weight_non_dom_0', 'weight_non_dom_1', 'delay_non_dom_0', 'delay_non_dom_1', 'tuning_angle', 'sf_sep']
+    df = pd.DataFrame(columns=features)
+
+    with h5py.File(h5_path, 'r') as h5_file:
+        node_id = h5_file['nodes']['lgn']['node_id'][:]
+        node_type_id = h5_file['nodes']['lgn']['node_type_id'][:]
+        for feature in h5_file['nodes']['lgn']['0'].keys():
+            df[feature] = h5_file['nodes']['lgn']['0'][feature][:]
+
+    node_info = {}
+    for index, row in csv_file.iterrows():
+        node_info[row['node_type_id']] = {'model_id': row['pop_name'], 'location': row['location'], 'ei': row['ei']}
+
+    df['id'] = node_id
+    df['model_id'] = [node_info[node_type_id[i]]['model_id'] for i in range(len(node_type_id))]
+    df['location'] = [node_info[node_type_id[i]]['location'] for i in range(len(node_type_id))]
+    df['ei'] = [node_info[node_type_id[i]]['ei'] for i in range(len(node_type_id))]
+
+    df.to_csv(filename, index=False, sep=' ', na_rep='NaN')
+    return df
+
 
 class LGN(object):
     def __init__(self, row_size=80, col_size=120, lgn_data_path=None):
@@ -105,11 +131,10 @@ class LGN(object):
                 path = f'/allen/programs/mindscope/workgroups/realistic-model/shinya.ito/tensorflow/{lgn_data_path_name}'
             else:
                 path = f'/home/jgalvan/Desktop/Neurocoding/Visual_stimulus/Utils/data/{lgn_data_path_name}'
-
+            d = pd.read_csv(path, delimiter=' ')
         else:
-            path = lgn_data_path
-
-        d = pd.read_csv(path, delimiter=' ')
+            d = create_lgn_units_info()
+        
         # print(d['spatial_size'])
         spatial_sizes = d['spatial_size'].to_numpy()
         self.spatial_sizes = spatial_sizes
@@ -129,7 +154,7 @@ class LGN(object):
         subfield_separation = d['sf_sep'].to_numpy()  # for composite cells
 
         root_path = os.path.split(__file__)[0]
-        s_path = os.path.join(root_path, 'spontaneous_firing_rates.pkl')
+        s_path = os.path.join(root_path, f'spontaneous_firing_rates_{col_size}x{row_size}.pkl')
         if not os.path.exists(s_path):
             cell_type = [a[:a.find('_')] for a in model_id]
             tf_str = [a[a.find('_') + 1:] for a in model_id]
@@ -166,7 +191,7 @@ class LGN(object):
             (d['delay_non_dom_0'].to_numpy(), d['delay_non_dom_1'].to_numpy()), -1)
 
         # values from bmtk
-        t_path = os.path.join(root_path, 'temporal_kernels.pkl')
+        t_path = os.path.join(root_path, f'temporal_kernels_{col_size}x{row_size}.pkl')
         kernel_length = 700
         if not os.path.exists(t_path):
             nkt = 600

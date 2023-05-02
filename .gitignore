@@ -19,4 +19,5 @@ __pycache__
 Utils/old_lgn.py
 Utils/spontaneous_firing_rates.pkl
 Utils/temporal_kernels.pkl
-Utils/pruebas.py
+Utils/pruebas.ipynb
+Utils/data
